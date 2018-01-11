@@ -109,7 +109,7 @@ def get_pose(image):
 
 	model = pose_model(models)
 	model.load_state_dict(torch.load(weight_name))
-	#model.cuda()
+	model.cuda()
 	model.float()
 	model.eval()
 
@@ -118,12 +118,12 @@ def get_pose(image):
 	#torch.nn.functional.pad(img pad, mode='constant', value=model_['padValue'])
 	tic = time.time()
 	oriImg = image
-	imageToTest = Variable(T.transpose(T.transpose(T.unsqueeze(torch.from_numpy(oriImg).float(),0),2,3),1,2),volatile=True)
+	imageToTest = Variable(T.transpose(T.transpose(T.unsqueeze(torch.from_numpy(oriImg).float(),0),2,3),1,2),volatile=True).cuda()
 
 	multiplier = [x * model_['boxsize'] / oriImg.shape[0] for x in param_['scale_search']]
 
-	heatmap_avg = torch.zeros((len(multiplier),19,oriImg.shape[0], oriImg.shape[1]))
-	paf_avg = torch.zeros((len(multiplier),38,oriImg.shape[0], oriImg.shape[1]))
+	heatmap_avg = torch.zeros((len(multiplier),19,oriImg.shape[0], oriImg.shape[1])).cuda()
+	paf_avg = torch.zeros((len(multiplier),38,oriImg.shape[0], oriImg.shape[1])).cuda()
 	#print(heatmap_avg.size())
 
 	toc =time.time()
@@ -142,10 +142,10 @@ def get_pose(image):
 		imageToTest_padded, pad = util.padRightDownCorner(imageToTest, model_['stride'], model_['padValue'])
 		imageToTest_padded = np.transpose(np.float32(imageToTest_padded[:,:,:,np.newaxis]), (3,2,0,1))/256 - 0.5
 
-		feed = Variable(T.from_numpy(imageToTest_padded))
+		feed = Variable(T.from_numpy(imageToTest_padded)).cuda()
 		output1,output2 = model(feed)
-		heatmap = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1]))(output2)
-		paf = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1]))(output1)
+		heatmap = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1])).cuda()(output2)
+		paf = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1])).cuda()(output1)
 
 		heatmap_avg[m] = heatmap[0].data
 		paf_avg[m] = paf[0].data
