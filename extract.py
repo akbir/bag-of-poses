@@ -13,12 +13,15 @@ def get_joints(limbs, joints, limbSeq):
             angles.append(0) #if limb is obstructed by other object
     neck_nose = limbSeq[12]
     angles.append(angle_between(neck_nose,[0,1]))
-    #final angle in vector tells us frame relative to the picture
+    #final angle in vector tells us frame relative to the pict
     return(angles)
 
 def unit_vector(vector):
-    """ Returns the unit vector of the vector.  """
-    return vector / np.linalg.norm(vector)
+    if np.linalg.norm(vector) ==0:
+        answer =  vector
+    else:
+        answer = vector / np.linalg.norm(vector)
+    return(answer)
 
 def angle_between(v1, v2):
     """ Returns the angle in radians between vectors 'v1' and 'v2'::
@@ -29,4 +32,10 @@ def angle_between(v1, v2):
     """
     v1_u = unit_vector(v1)
     v2_u = unit_vector(v2)
-    return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+
+    dot = np.dot(v1_u, v2_u)
+    det = v1_u[0]*v2_u[1]-v1_u[1]*v2_u[0]
+    angle = np.arctan2(det,dot)
+    if np.isnan(angle):
+        angle = 0
+    return angle

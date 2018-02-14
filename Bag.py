@@ -1,4 +1,5 @@
 import cv2
+import pickle
 import numpy as np
 from glob import glob
 import argparse
@@ -6,7 +7,6 @@ from helpers import *
 from matplotlib import pyplot as plt
 import itertools
 import matplotlib.pyplot as plt
-
 from sklearn import svm, datasets
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, accuracy_score
@@ -50,6 +50,8 @@ class BOV:
 		self.no_clusters = no_clusters
 		self.train_path = None
 		self.test_path = None
+		self.checkpoint_path = None
+		self.checkpoint = {}
 		self.im_helper = ImageHelpers()
 		self.bov_helper = BOVHelpers(no_clusters)
 		self.file_helper = FileHelpers()
@@ -71,20 +73,43 @@ class BOV:
 
 		# read file. prepare file lists.
 		self.images, self.trainImageCount = self.file_helper.getFiles(self.train_path)
+		if bool(self.checkpoint):
+			self.trainImageCount = self.checkpoint['ImageCount']
+		print(self.trainImageCount)
+
 		# extract SIFT Features from each image
 		label_count = 0
+		if bool(self.name_dict):
+			boo = list(map(int,self.name_dict.keys()))
+			label_count = max(boo)
+			print("Updated labelcount is", label_count)
+
 		for word, imlist in self.images.items():
 			self.name_dict[str(label_count)] = word
 			print("Computing Features for ", word)
+			im_count = 0
 			for im in imlist:
 				# cv2.imshow("im", im)
 				# cv2.waitKey()
+				print(im_count)
 				self.train_labels = np.append(self.train_labels, label_count)
-				des = self.im_helper.features(im)
+				des = self.im_helper.features(im,im_count)
 				self.descriptor_list.append(des)
+				im_count += 1
+
+			#self.train_labels =np.append(train_labels, label_count)
+			#train_labels = []
+			im_count = 0
+
+			print("Saving to file:", self.checkpoint_path)
+			with open(self.checkpoint_path, 'wb')as fp:
+				self.checkpoint['descriptor_list'] = self.descriptor_list
+				self.checkpoint['name_dict'] = self.name_dict
+				self.checkpoint['ImageCount'] = self.trainImageCount
+				self.checkpoint['train_labels']= self.train_labels
+				pickle.dump(self.checkpoint, fp)
 
 			label_count += 1
-
 
 		# perform clustering
 		print("Performing Clustering")
@@ -100,7 +125,7 @@ class BOV:
 		self.bov_helper.train(self.train_labels)
 
 
-	def recognize(self,test_img,    test_image_path=None):
+	def recognize(self,test_img,imcount, test_image_path=None):
 
 		"""
 		This method recognizes a single image
@@ -109,7 +134,7 @@ class BOV:
 
 		"""
 
-		des = self.im_helper.features(test_img)
+		des = self.im_helper.features(test_img,imcount)
 
 		# generate vocab for test image
 		vocab = np.array( [ 0 for i in range(self.no_clusters)])
@@ -147,15 +172,17 @@ class BOV:
 
 		for word, imlist in self.testImages.items():
 			print("processing " ,word)
+			imcount=0
 			for im in imlist:
 				y_test.append(word)
-				cl = self.recognize(im)
+				cl = self.recognize(im,imcount)
 				y_pred.append(self.name_dict[str(int(cl[0]))])
 				predictions.append({
 					'image':im,
 					'class':cl,
 					'object_name':self.name_dict[str(int(cl[0]))]
 					})
+				imcount +=1
 		return(y_test, y_pred)
 		# print predictions
 
@@ -173,18 +200,32 @@ if __name__ == '__main__':
 		)
 	parser.add_argument('--train_path', action="store", dest="train_path", required=True)
 	parser.add_argument('--test_path', action="store", dest="test_path", required=True)
+	parser.add_argument('--checkpoint_path', action="store", dest="checkpoint_path", required=False)
 
 	args =  vars(parser.parse_args())
 	# print args
 
 	class_names =[]
 
-	bov = BOV(no_clusters=110)
+	bov = BOV(no_clusters=150)
 
 	# set training paths
 	bov.train_path = args['train_path']
 	# set testing paths
 	bov.test_path = args['test_path']
+	bov.checkpoint_path=args['checkpoint_path']
+
+	if bov.checkpoint_path is None:
+		bov.checkpoint_path = 'checkpoint.pkl'
+		print("Created checkpoint")
+	else:
+		print("Loading checkpoint")
+		bov.checkpoint = pickle.load(open(bov.checkpoint_path, 'rb'))
+		bov.descriptor_list = bov.checkpoint['descriptor_list']
+		bov.name_dict =bov.checkpoint['name_dict']
+		bov.train_labels = bov.checkpoint['train_labels']
+		#print(bov.checkpoint)
+
 	# train the model
 	print("Training the model")
 	bov.trainModel()

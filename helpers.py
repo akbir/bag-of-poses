@@ -1,4 +1,7 @@
+import  matplotlib
+matplotlib.use('Agg')
 import cv2
+import torch
 import numpy as np
 from glob import glob
 from sklearn.cluster import MiniBatchKMeans, KMeans
@@ -9,10 +12,12 @@ from pose import get_pose
 
 class ImageHelpers:
 	def __init__(self):
-		self.sift_object = cv2.xfeatures2d.SIFT_create()
+		#self.sift_object = xfeatures2d.SIFT_create()
+		self.stupid = 'lol'
 
-	def features(self, image):
-		descriptors = get_pose(image)
+	def features(self, image,im_count):
+		gpu = im_count%4
+		descriptors = get_pose(image,gpu)
 		return(descriptors)
 
 class BOVHelpers:
@@ -70,7 +75,10 @@ class BOVHelpers:
 		"""
 		vStack = np.array(l[0])
 		for remaining in l[1:]:
-			vStack = np.vstack((vStack, remaining))
+			if remaining != []:
+				vStack = np.vstack((vStack, remaining))
+		where_are_NaNs = np.isnan(vStack)
+		vStack[where_are_NaNs]=np.float(0)
 		self.descriptor_vstack = vStack.copy()
 		return vStack
 
@@ -125,7 +133,17 @@ class FileHelpers:
 			for imagefile in glob(path+word+"/*"):
 				print("Reading file ", imagefile)
 				im = cv2.imread(imagefile)
-				imlist[word].append(im)
+				x,y = int(im.shape[0]/1000), int(im.shape[1]/1000)
+				if x > 0 and  y>0:
+					n = min(x,y)
+					fxx, fyy = np.round(0.25*1/n,2),np.round(0.25*1/n,2)
+					im2= cv2.resize(im,None, fx= fxx,fy= fyy,interpolation = cv2.INTER_AREA)
+					imlist[word].append(im2)
+				elif x > 0 or y >0:
+					im2= cv2.resize(im,None, fx= 0.5,fy= 0.5,interpolation = cv2.INTER_AREA)
+					imlist[word].append(im2)
+				else:
+					imlist[word].append(im)
 				count +=1
 
 		return [imlist, count]

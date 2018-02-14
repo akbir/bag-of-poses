@@ -26,10 +26,10 @@ from model import pose_model
 #parser.add_argument('--pth_file', required=True
 #args = parser.parse_args()
 
-def get_pose(image):
+def get_pose(image,gpu):
 	T.set_num_threads(T.get_num_threads())
 	weight_name = './model/pose_model.pth'
-
+	(y, x, _) = image.shape
 	blocks = {}
 
 	# find connection in the specified sequence, center 29 is in the position 15
@@ -109,7 +109,7 @@ def get_pose(image):
 
 	model = pose_model(models)
 	model.load_state_dict(torch.load(weight_name))
-	model.cuda()
+	model.cuda(gpu)
 	model.float()
 	model.eval()
 
@@ -118,16 +118,16 @@ def get_pose(image):
 	#torch.nn.functional.pad(img pad, mode='constant', value=model_['padValue'])
 	tic = time.time()
 	oriImg = image
-	imageToTest = Variable(T.transpose(T.transpose(T.unsqueeze(torch.from_numpy(oriImg).float(),0),2,3),1,2),volatile=True).cuda()
+	imageToTest = Variable(T.transpose(T.transpose(T.unsqueeze(torch.from_numpy(oriImg).float(),0),2,3),1,2),volatile=True).cuda(gpu)
 
 	multiplier = [x * model_['boxsize'] / oriImg.shape[0] for x in param_['scale_search']]
 
-	heatmap_avg = torch.zeros((len(multiplier),19,oriImg.shape[0], oriImg.shape[1])).cuda()
-	paf_avg = torch.zeros((len(multiplier),38,oriImg.shape[0], oriImg.shape[1])).cuda()
+	heatmap_avg = torch.zeros((len(multiplier),19,oriImg.shape[0], oriImg.shape[1])).cuda(gpu)
+	paf_avg = torch.zeros((len(multiplier),38,oriImg.shape[0], oriImg.shape[1])).cuda(gpu)
 	#print(heatmap_avg.size())
 
 	toc =time.time()
-	print('time to load model is %.5f'%(toc-tic))
+	#print('time to load model is %.5f'%(toc-tic))
 	tic = time.time()
 	for m in range(len(multiplier)):
 		scale = multiplier[m]
@@ -142,17 +142,17 @@ def get_pose(image):
 		imageToTest_padded, pad = util.padRightDownCorner(imageToTest, model_['stride'], model_['padValue'])
 		imageToTest_padded = np.transpose(np.float32(imageToTest_padded[:,:,:,np.newaxis]), (3,2,0,1))/256 - 0.5
 
-		feed = Variable(T.from_numpy(imageToTest_padded)).cuda()
+		feed = Variable(T.from_numpy(imageToTest_padded)).cuda(gpu)
 		output1,output2 = model(feed)
-		heatmap = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1])).cuda()(output2)
-		paf = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1])).cuda()(output1)
+		heatmap = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1])).cuda(gpu)(output2)
+		paf = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1])).cuda(gpu)(output1)
 
 		heatmap_avg[m] = heatmap[0].data
 		paf_avg[m] = paf[0].data
 
 
 	toc =time.time()
-	print('time to forward pass is %.5f'%(toc-tic))
+	#print('time to forward pass is %.5f'%(toc-tic))
 	tic = time.time()
 
 	heatmap_avg = T.transpose(T.transpose(T.squeeze(T.mean(heatmap_avg, 0)),0,1),1,2)
@@ -160,7 +160,7 @@ def get_pose(image):
 	heatmap_avg=heatmap_avg.cpu().numpy()
 	paf_avg    = paf_avg.cpu().numpy()
 	toc =time.time()
-	print('time to take averages is %.5f'%(toc-tic))
+	#print('time to take averages is %.5f'%(toc-tic))
 	tic = time.time()
 
 	all_peaks = []
@@ -276,7 +276,7 @@ def get_pose(image):
 						subset[j][-2] += candidate[partAs[i].astype(int), 2] + connection_all[k][i][2]
 				elif found == 2: # if found 2 and disjoint, merge them
 					j1, j2 = subset_idx
-					print("found = 2")
+					#print("found = 2")
 					membership = ((subset[j1]>=0).astype(int) + (subset[j2]>=0).astype(int))[:-2]
 					if len(np.nonzero(membership == 2)[0]) == 0: #merge
 						subset[j1][:-2] += (subset[j2][:-2] + 1)
@@ -314,6 +314,7 @@ def get_pose(image):
 	for n in range(len(subset)):
 		limbs = {}
 		angles = []
+		position =[]
 		for i in range(17):
 			index = subset[n][np.array(limbSeq[i])-1]
 			if -1 in index:
@@ -324,7 +325,9 @@ def get_pose(image):
 
 			limb = ((X[0]-X[1],Y[0]-Y[1]))
 			limbs[tuple(limbSeq[i])] = limb
-
+			#if i == 12:
+				#position.append(np.mean(X)/x)
+				#position.append(np.mean(Y)/y)
 			# mX = np.mean(X)
 			# mY = np.mean(Y)
 			# length = ((X[0] - X[1]) ** 2 + (Y[0] - Y[1]) ** 2) ** 0.5
@@ -338,7 +341,8 @@ def get_pose(image):
 
 	#Parallel(n_jobs=1)(delayed(handle_one)(i) for i in range(18))
 	toc =time.time()
-	print('time to feature extract is %.5f'%(toc-tic))
+	#torch.cuda.empty_cache()
+	#print('time to feature extract is %.5f'%(toc-tic))
 	return(results)
 	#cv2.imwrite('result.png',canvas)
 
