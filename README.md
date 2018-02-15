@@ -31,3 +31,7 @@ Saves checkpoint after each labelled object for loading large data:  `./checkpoi
 Remove completed labelled object by running again: 
 
 `:~$ python Bag.py --train_path images/train/ --test_path images/test/ --checkpoint_path ./checkpoint.pkl`
+
+Produces Confusion Matrix and Historgram of Words:
+
+![histogram](https://github.com/am-khan/bag-of-poses/blob/master/histogram.png)![Confusion](confusion_matrix.png)
